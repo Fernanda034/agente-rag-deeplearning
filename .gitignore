@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Vector Database Local
+vector_db/
+.python_packages/
+.chroma_onnx_cache/
