@@ -108,33 +108,69 @@ The two active branches are `deep_learning` (primary) and `machine_learning_esta
 
 ## Pilar 04 — Evaluación y Visualización (Fernanda)
 
-### Objetivo
-Medir la calidad del sistema RAG con métricas RAGAS y mostrar resultados
-en una interfaz Streamlit.
+### Evaluación local
 
-### Archivos principales
-- `04_evaluacion/evaluar_cobertura_direct.py` → cobertura del corpus
-- `04_evaluacion/evaluar_profundidad_chunks.py` → profundidad de chunks
-- `04_evaluacion/ragas_eval.py` → evaluación completa con RAGAS (en desarrollo)
-- `app.py` → interfaz Streamlit del chatbot
-
-### Comandos de evaluación
 ```bash
-# Cobertura del corpus
+# Cobertura del corpus por tema
 python 04_evaluacion/evaluar_cobertura_direct.py --embedding-backend onnx-minilm -k 5
 
-# Profundidad de chunks
+# Profundidad de chunks por pregunta
 python 04_evaluacion/evaluar_profundidad_chunks.py --embedding-backend onnx-minilm -k 5
 
-# App Streamlit
+# Evaluación RAGAS completa (requiere GROQ_API_KEY y vector_db/)
+python 04_evaluacion/ragas_eval.py --k 4
+```
+
+`ragas_eval.py` usa Groq como juez LLM y calcula las cuatro métricas núcleo de RAGAS 0.4.x:
+`faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`.
+Salida: `docs/ragas_report.md`.
+
+### Interfaz local (Streamlit)
+
+```bash
 streamlit run app.py
 ```
 
-### Métricas RAGAS a implementar
-- `faithfulness` → respuesta fiel al contexto recuperado
-- `answer_relevancy` → relevancia de la respuesta a la pregunta
-- `context_precision` → precisión del contexto recuperado
-- `context_recall` → cobertura del contexto relevante
+Requiere `vector_db/` construido. Variables de entorno: `GROQ_API_KEY`.
 
-### Dependencias del pilar
-Requiere que el vector_db/ ya esté construido (corre primero el Pilar 01).
+---
+
+## Despliegue en Vercel
+
+### Arquitectura
+
+```
+public/index.html    → interfaz web (HTML + Tailwind + KaTeX + marked.js)
+api/chat.py          → Python serverless Flask (Vercel @vercel/python)
+vercel.json          → routing: /api/* → api/chat.py, /* → public/
+```
+
+La API opera en **dos modos automáticos**:
+- **RAG** (`mode: "rag"`)  — si `vector_db/` existe (desarrollo local).
+- **Groq directo** (`mode: "direct"`) — si `vector_db/` no existe (Vercel deploy), usando un system prompt de experto en Deep Learning.
+
+### Pasos para desplegar
+
+```bash
+# 1. Instalar Vercel CLI
+npm i -g vercel
+
+# 2. Crear el secret de la API key en Vercel
+vercel secrets add groq-api-key "gsk_..."
+
+# 3. Desplegar
+vercel --prod
+
+# 4. Verificar que la API funciona
+curl -s https://<tu-deploy>.vercel.app/api/health
+```
+
+### Requirements para Vercel
+
+El deploy usa `requirements-vercel.txt` (solo Flask + LangChain + Groq, sin ChromaDB ni modelos pesados).
+Los archivos excluidos del deploy están en `.vercelignore`.
+
+### Variable de entorno obligatoria
+
+En el dashboard de Vercel → Settings → Environment Variables:
+- `GROQ_API_KEY` = `gsk_...` (tu clave de Groq)

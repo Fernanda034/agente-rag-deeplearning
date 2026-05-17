@@ -1,0 +1,20 @@
+# Excluir artefactos locales pesados del deploy en Vercel
+vector_db/
+.chroma_onnx_cache/
+.python_packages/
+.conda_packages_py39/
+notebooks/
+docs/*.docx
+corpus/
+*.pdf
+
+# Scripts de ingesta/evaluación no necesarios en Vercel
+01_ingesta/
+02_vectorstore/
+03_agente/
+04_evaluacion/
+
+# Streamlit (se usa solo en local)
+app.py
+requirements_chroma_py39.txt
+requirements_metadata.txt

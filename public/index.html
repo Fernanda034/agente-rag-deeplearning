@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asistente de Deep Learning</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+
+  <!-- KaTeX (LaTeX math) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+
+    /* Scrollbar */
+    #chat-container::-webkit-scrollbar { width: 6px; }
+    #chat-container::-webkit-scrollbar-track { background: #f1f5f9; }
+    #chat-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+
+    /* Markdown inside messages */
+    .msg-content h1,h2,h3 { font-weight: 700; margin: 0.75rem 0 0.4rem; }
+    .msg-content h1 { font-size: 1.15rem; }
+    .msg-content h2 { font-size: 1.05rem; }
+    .msg-content h3 { font-size: 0.95rem; }
+    .msg-content p  { margin-bottom: 0.5rem; line-height: 1.65; }
+    .msg-content ul,ol { margin: 0.4rem 0 0.4rem 1.25rem; }
+    .msg-content li { margin-bottom: 0.25rem; }
+    .msg-content code:not(.katex *) {
+      background: rgba(0,0,0,0.08); border-radius: 3px;
+      padding: 0.1rem 0.3rem; font-size: 0.85em; font-family: monospace;
+    }
+    .msg-content pre {
+      background: #1e293b; border-radius: 8px; padding: 0.85rem;
+      overflow-x: auto; margin: 0.5rem 0;
+    }
+    .msg-content pre code {
+      background: none; color: #e2e8f0; font-size: 0.82em;
+    }
+    .msg-content strong { font-weight: 700; }
+    .msg-content em { font-style: italic; }
+    .msg-content blockquote {
+      border-left: 3px solid #6366f1; padding-left: 0.75rem;
+      color: #475569; margin: 0.5rem 0;
+    }
+    .msg-content .katex-display { overflow-x: auto; padding: 0.4rem 0; }
+
+    /* Thinking dots */
+    @keyframes blink { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+           background: #6366f1; animation: blink 1.4s infinite; margin: 0 2px; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    /* Message entrance */
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .msg-row { animation: slideUp 0.2s ease; }
+  </style>
+</head>
+<body class="bg-slate-50 flex flex-col h-screen overflow-hidden">
+
+  <!-- ─── Header ─────────────────────────────────────────────── -->
+  <header class="bg-gradient-to-r from-indigo-700 to-violet-700 text-white shadow-lg flex-shrink-0">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🧠</span>
+        <div>
+          <h1 class="font-bold text-lg leading-tight">Asistente de Deep Learning</h1>
+          <p class="text-indigo-200 text-xs">RAG · Groq Llama 3.3 70b · ChromaDB</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="mode-badge" class="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full hidden"></span>
+        <button onclick="clearChat()"
+          class="text-xs bg-white/10 hover:bg-white/20 transition px-3 py-1.5 rounded-lg">
+          Limpiar chat
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── Topic chips ─────────────────────────────────────────── -->
+  <div class="bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
+    <div class="max-w-4xl mx-auto px-4 py-2 flex gap-2 flex-nowrap">
+      <span class="text-xs text-slate-400 self-center whitespace-nowrap">Temas:</span>
+      <button class="topic-chip" onclick="sendTopic('¿Qué es self-attention y cómo funciona multi-head attention?')">Transformers</button>
+      <button class="topic-chip" onclick="sendTopic('¿Cómo funciona el optimizador Adam?')">Adam</button>
+      <button class="topic-chip" onclick="sendTopic('¿Para qué sirve Batch Normalization?')">BatchNorm</button>
+      <button class="topic-chip" onclick="sendTopic('¿En qué se diferencian LSTM y GRU?')">LSTM/GRU</button>
+      <button class="topic-chip" onclick="sendTopic('¿Por qué ResNet usa conexiones residuales?')">ResNet</button>
+      <button class="topic-chip" onclick="sendTopic('¿Qué muestra Grad-CAM?')">Grad-CAM</button>
+      <button class="topic-chip" onclick="sendTopic('¿En qué se diferencia un VAE de una GAN?')">VAE vs GAN</button>
+    </div>
+  </div>
+
+  <style>
+    .topic-chip {
+      @apply whitespace-nowrap text-xs bg-indigo-50 text-indigo-700 border border-indigo-200
+             hover:bg-indigo-100 transition px-2.5 py-1 rounded-full cursor-pointer;
+    }
+  </style>
+
+  <!-- ─── Chat area ────────────────────────────────────────────── -->
+  <main id="chat-container" class="flex-1 overflow-y-auto">
+    <div id="messages" class="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-4">
+
+      <!-- Welcome message -->
+      <div class="msg-row flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-sm flex-shrink-0 mt-1">🧠</div>
+        <div class="flex flex-col gap-1 max-w-[80%]">
+          <span class="text-xs text-slate-400">Asistente</span>
+          <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+            <div class="msg-content text-slate-800 text-sm">
+              <p>¡Hola! Soy tu asistente académico especializado en <strong>Deep Learning</strong>.</p>
+              <p>Puedo ayudarte con preguntas sobre el temario: Transformers, optimizadores, regularización, redes recurrentes, visión por computador, explicabilidad y modelos generativos.</p>
+              <p class="text-slate-500 text-xs">Selecciona un tema de arriba o escribe tu pregunta.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ─── Input area ───────────────────────────────────────────── -->
+  <footer class="bg-white border-t border-slate-200 flex-shrink-0 shadow-lg">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex gap-3 items-end">
+      <textarea
+        id="user-input"
+        rows="1"
+        placeholder="Escribe tu pregunta sobre Deep Learning..."
+        class="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition max-h-32 overflow-y-auto"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button
+        id="send-btn"
+        onclick="sendMessage()"
+        class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-5 py-3 text-sm font-medium transition flex items-center gap-2 flex-shrink-0"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+        </svg>
+        Enviar
+      </button>
+    </div>
+    <p class="text-center text-xs text-slate-400 pb-2">
+      Respuestas basadas en papers académicos · Groq Llama 3.3 · 2026
+    </p>
+  </footer>
+
+  <script>
+    // ─── State ────────────────────────────────────────────────────
+    const history = [];
+    const API_URL = '/api/chat';
+
+    // ─── Marked configuration ─────────────────────────────────────
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // ─── Auto-resize textarea ──────────────────────────────────────
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+    }
+
+    // ─── Handle Enter key (Shift+Enter = new line) ─────────────────
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    // ─── Topic chip shortcut ───────────────────────────────────────
+    function sendTopic(question) {
+      document.getElementById('user-input').value = question;
+      sendMessage();
+    }
+
+    // ─── Render LaTeX in a node ───────────────────────────────────
+    function renderMath(node) {
+      renderMathInElement(node, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$',  right: '$',  display: false },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+
+    // ─── Append a message bubble ───────────────────────────────────
+    function appendMessage(role, content) {
+      const container = document.getElementById('messages');
+      const isUser = role === 'user';
+
+      const row = document.createElement('div');
+      row.className = `msg-row flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = `w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 mt-1 ${
+        isUser
+          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white'
+          : 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white'
+      }`;
+      avatar.textContent = isUser ? '👤' : '🧠';
+
+      const bubble = document.createElement('div');
+      bubble.className = `flex flex-col gap-1 ${isUser ? 'items-end' : ''} max-w-[80%]`;
+
+      const label = document.createElement('span');
+      label.className = 'text-xs text-slate-400';
+      label.textContent = isUser ? 'Tú' : 'Asistente';
+
+      const msgBox = document.createElement('div');
+      msgBox.className = isUser
+        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 text-sm'
+        : 'bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm';
+
+      if (isUser) {
+        msgBox.textContent = content;
+      } else {
+        const inner = document.createElement('div');
+        inner.className = 'msg-content text-slate-800 text-sm';
+        inner.innerHTML = marked.parse(content);
+        msgBox.appendChild(inner);
+        renderMath(inner);
+      }
+
+      bubble.appendChild(label);
+      bubble.appendChild(msgBox);
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+      container.appendChild(row);
+
+      // Scroll to bottom
+      const chatContainer = document.getElementById('chat-container');
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      return row;
+    }
+
+    // ─── Thinking indicator ────────────────────────────────────────
+    function showThinking() {
+      const container = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.id = 'thinking-row';
+      row.className = 'msg-row flex gap-3';
+      row.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-sm flex-shrink-0 mt-1">🧠</div>
+        <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1" style="height:42px">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>`;
+      container.appendChild(row);
+      document.getElementById('chat-container').scrollTop = 99999;
+    }
+
+    function hideThinking() {
+      document.getElementById('thinking-row')?.remove();
+    }
+
+    // ─── Clear chat ────────────────────────────────────────────────
+    function clearChat() {
+      history.length = 0;
+      const container = document.getElementById('messages');
+      // Keep welcome message (first child), remove the rest
+      while (container.children.length > 1) {
+        container.removeChild(container.lastChild);
+      }
+    }
+
+    // ─── Send message ──────────────────────────────────────────────
+    async function sendMessage() {
+      const input = document.getElementById('user-input');
+      const btn   = document.getElementById('send-btn');
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+      btn.disabled = true;
+
+      appendMessage('user', message);
+      history.push({ role: 'user', content: message });
+
+      showThinking();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history: history.slice(0, -1) }),
+        });
+
+        hideThinking();
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          appendMessage('assistant', `❌ Error del servidor: ${err.error || res.statusText}`);
+          return;
+        }
+
+        const data = await res.json();
+        const response = data.response || 'Sin respuesta.';
+        const mode = data.mode;
+
+        appendMessage('assistant', response);
+        history.push({ role: 'assistant', content: response });
+
+        // Show mode badge
+        const badge = document.getElementById('mode-badge');
+        if (mode) {
+          badge.textContent = mode === 'rag' ? '🗄️ RAG activo' : '⚡ Groq directo';
+          badge.className = `text-xs px-2 py-0.5 rounded-full ${
+            mode === 'rag'
+              ? 'bg-emerald-500/30 text-emerald-100'
+              : 'bg-amber-400/30 text-amber-100'
+          }`;
+          badge.classList.remove('hidden');
+        }
+
+      } catch (err) {
+        hideThinking();
+        appendMessage('assistant', `❌ No se pudo conectar con la API: ${err.message}.\n\nVerifica que el servidor esté corriendo en \`/api/chat\`.`);
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    // ─── Init ──────────────────────────────────────────────────────
+    document.getElementById('user-input').focus();
+  </script>
+</body>
+</html>
