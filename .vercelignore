@@ -1,20 +1,30 @@
-# Excluir artefactos locales pesados del deploy en Vercel
+# Large local artifacts — not needed in Vercel (direct Groq mode)
 vector_db/
-.chroma_onnx_cache/
-.python_packages/
-.conda_packages_py39/
-notebooks/
-docs/*.docx
 corpus/
-*.pdf
+.chroma_onnx_cache/
 
-# Scripts de ingesta/evaluación no necesarios en Vercel
+# Local-only pipeline scripts
 01_ingesta/
 02_vectorstore/
 03_agente/
 04_evaluacion/
 
-# Streamlit (se usa solo en local)
-app.py
+# Notebooks and docs source
+notebooks/
+docs/*.docx
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets
+.env
+
+# Heavy requirements files (Vercel uses requirements-vercel.txt via vercel.json)
+requirements.txt
 requirements_chroma_py39.txt
 requirements_metadata.txt
+
+# Streamlit entrypoint (not used on Vercel)
+app.py

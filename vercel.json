@@ -4,7 +4,12 @@
     {
       "src": "api/chat.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "50mb" }
+      "config": { "requirementsFile": "requirements-vercel.txt" }
+    },
+    {
+      "src": "api/health.py",
+      "use": "@vercel/python",
+      "config": { "requirementsFile": "requirements-vercel.txt" }
     },
     {
       "src": "public/**",
@@ -12,11 +17,9 @@
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/chat.py" },
-    { "src": "/",         "dest": "/public/index.html" },
-    { "src": "/(.*)",     "dest": "/public/$1" }
-  ],
-  "env": {
-    "GROQ_API_KEY": "@groq-api-key"
-  }
+    { "src": "/api/health", "dest": "/api/health.py" },
+    { "src": "/api/(.*)",   "dest": "/api/chat.py" },
+    { "src": "/",           "dest": "/public/index.html" },
+    { "src": "/(.*)",       "dest": "/public/$1" }
+  ]
 }

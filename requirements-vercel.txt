@@ -1,11 +1,7 @@
-# Dependencias mínimas para el despliegue en Vercel (sin ML pesado local)
-# La API corre en modo "Groq directo" al no haber vector_db disponible.
-
+# Vercel deploy — direct Groq mode only (no ChromaDB, no heavy ML)
 flask>=3.0
 flask-cors>=4.0
-langchain>=1.0
-langchain-core>=0.3
+groq>=0.11
 langchain-groq>=0.3
-langchain-community>=0.3
+langchain-core>=0.3
 python-dotenv>=1.0
-arxiv>=2.1

@@ -1,15 +1,11 @@
 """
-API de chat para despliegue en Vercel (Python serverless).
+POST /api/chat
+  Body:     {"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}
+  Response: {"response": "...", "sources": [...], "mode": "rag"|"direct"}
 
-Modos de operación:
-  1. RAG completo  — si vector_db/ existe (desarrollo local con ONNX MiniLM + ChromaDB).
-  2. Groq directo  — fallback para Vercel (sin vector_db local); usa un system prompt
-                     experto en Deep Learning para contestar sin recuperación.
-
-Endpoint:
-  POST /api/chat
-  Body: {"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}
-  Response: {"response": "...", "mode": "rag"|"direct"}
+Modes:
+  rag    — vector_db/ found locally: full ChromaDB + LangChain agent pipeline.
+  direct — no vector_db (Vercel deploy): Groq Llama 3.3 70b with expert system prompt.
 """
 
 from __future__ import annotations
@@ -17,9 +13,10 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+
 from dotenv import load_dotenv
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 
 load_dotenv()
 
@@ -29,34 +26,49 @@ sys.path.insert(0, str(ROOT_DIR))
 app = Flask(__name__)
 CORS(app)
 
-_agent_executor = None
-_agent_load_attempted = False
+# ── Serve public/index.html for local dev (python api/chat.py) ───────────────
+@app.route("/")
+def index():
+    return send_from_directory(str(ROOT_DIR / "public"), "index.html")
 
-EXPERT_SYSTEM_PROMPT = """Eres un asistente académico experto en Machine Learning y Deep Learning,
-especializado en los siguientes temas del temario universitario:
+@app.route("/<path:filename>")
+def static_files(filename):
+    return send_from_directory(str(ROOT_DIR / "public"), filename)
 
-• Fundamentos: tensores, MLP, funciones de activación, pérdida
-• Entrenamiento: SGD, Momentum, RMSProp, Adam, backpropagation
-• Estabilidad: dropout, weight decay, BatchNorm, inicialización, gradientes
-• Secuenciales: RNN, LSTM, GRU, embeddings, padding, encoder-decoder
+
+# ── Expert system prompt (direct / Groq-only mode) ───────────────────────────
+_SYSTEM_PROMPT = """\
+Eres un asistente académico experto en Machine Learning y Deep Learning, \
+diseñado para ayudar a estudiantes universitarios con su temario.
+
+Temas que dominas:
+• Fundamentos: tensores, MLP, funciones de activación, función de pérdida
+• Entrenamiento: SGD, Momentum, RMSProp, Adam, backpropagation, schedulers
+• Regularización: dropout, weight decay, BatchNorm, early stopping, inicialización
+• Secuenciales: RNN, LSTM, GRU, embeddings, tokenización, encoder-decoder
 • Atención y Transformers: self-attention, multi-head attention, positional encoding, BERT
-• Visión: CNN, filtros, stride, ResNet, conexiones residuales, transfer learning
-• Explicabilidad: saliency maps, Grad-CAM, visualización de atención
-• Generativos: autoencoders, VAE, GANs, espacio latente
+• Visión: CNN, filtros, stride, padding, ResNet, transfer learning, data augmentation
+• Explicabilidad: saliency maps, Grad-CAM, class activation maps
+• Generativos: autoencoders, VAE, GANs, espacio latente, estabilidad
 
-Reglas:
+Reglas obligatorias:
 1. Responde siempre en español, de manera didáctica y estructurada.
-2. Usa LaTeX con signos de dólar para fórmulas (ejemplo: $\\sigma(x) = \\frac{1}{1+e^{-x}}$).
-3. Si citas un concepto de un paper conocido, menciona el paper (ej. "Attention Is All You Need, Vaswani et al. 2017").
-4. Si no estás seguro de algo, dilo explícitamente.
-5. Sé conciso pero completo. Usa listas y secciones para estructurar respuestas largas."""
+2. Escribe fórmulas en LaTeX entre signos de dólar: $E = mc^2$ o $$\\sigma(x) = \\frac{1}{1+e^{-x}}$$.
+3. Cita el paper fuente cuando lo conozcas (ej. "Attention Is All You Need, Vaswani et al. 2017").
+4. Usa listas, secciones y negrita para estructurar respuestas largas.
+5. Si no estás seguro, dilo explícitamente.\
+"""
+
+# ── Lazy-load the RAG agent (only when vector_db/ exists) ─────────────────────
+_agent = None
+_agent_attempted = False
 
 
-def _try_load_agent():
-    global _agent_executor, _agent_load_attempted
-    if _agent_load_attempted:
-        return _agent_executor
-    _agent_load_attempted = True
+def _load_agent():
+    global _agent, _agent_attempted
+    if _agent_attempted:
+        return _agent
+    _agent_attempted = True
 
     db_path = ROOT_DIR / "vector_db"
     if not db_path.exists():
@@ -65,82 +77,100 @@ def _try_load_agent():
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "agent_module", ROOT_DIR / "03_agente" / "agent.py"
+            "agent_mod", ROOT_DIR / "03_agente" / "agent.py"
         )
-        agent_mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(agent_mod)
-        _agent_executor = agent_mod.get_agent()
-        print("Modo RAG completo activado (ChromaDB disponible).")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _agent = mod.get_agent()
+        print("✓ RAG mode: ChromaDB loaded.")
     except Exception as exc:
-        print(f"RAG no disponible, usando Groq directo: {exc}")
-        _agent_executor = None
+        print(f"✗ RAG unavailable, falling back to direct: {exc}")
+        _agent = None
 
-    return _agent_executor
-
-
-def _respond_with_agent(message: str, history: list[dict]) -> str:
-    formatted = []
-    for msg in history:
-        role = "human" if msg.get("role") == "user" else "assistant"
-        formatted.append((role, msg.get("content", "")))
-
-    result = _agent_executor.invoke({"input": message, "chat_history": formatted})
-    return result.get("output", "No se pudo generar una respuesta.")
+    return _agent
 
 
-def _respond_direct(message: str, history: list[dict]) -> str:
+# ── Source extraction via LangChain callback ──────────────────────────────────
+class _SourceCapture:
+    """Minimal retriever callback that collects document metadata."""
+    def __init__(self):
+        self.sources: list[dict] = []
+
+    # LangChain calls this after each retriever invocation
+    def on_retriever_end(self, documents, **_):
+        seen = set()
+        for doc in documents:
+            m = doc.metadata
+            key = (m.get("file_name", ""), m.get("page", ""))
+            if key in seen or not key[0]:
+                continue
+            seen.add(key)
+            self.sources.append({
+                "file":  m.get("file_name", m.get("source", "Desconocido")),
+                "page":  m.get("page"),
+                "topic": m.get("topic", ""),
+            })
+
+
+# ── Response helpers ──────────────────────────────────────────────────────────
+def _rag_response(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+    capture = _SourceCapture()
+
+    # Format history as LangChain expects
+    formatted = [
+        ("human" if m["role"] == "user" else "assistant", m["content"])
+        for m in history
+    ]
+
+    result = _agent.invoke(
+        {"input": message, "chat_history": formatted},
+        config={"callbacks": [capture]},
+    )
+    return result.get("output", "Sin respuesta."), capture.sources
+
+
+def _direct_response(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
 
-    messages = [SystemMessage(content=EXPERT_SYSTEM_PROMPT)]
-    for msg in history[-6:]:  # últimos 6 mensajes para no exceder contexto
-        if msg.get("role") == "user":
-            messages.append(HumanMessage(content=msg["content"]))
-        else:
-            messages.append(AIMessage(content=msg["content"]))
-    messages.append(HumanMessage(content=message))
+    msgs = [SystemMessage(content=_SYSTEM_PROMPT)]
+    for m in history[-8:]:  # keep last 8 turns to stay within context window
+        cls = HumanMessage if m["role"] == "user" else AIMessage
+        msgs.append(cls(content=m["content"]))
+    msgs.append(HumanMessage(content=message))
 
-    response = llm.invoke(messages)
-    return response.content
+    return llm.invoke(msgs).content, []
 
 
+# ── Endpoint ──────────────────────────────────────────────────────────────────
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    data = request.get_json(force=True, silent=True) or {}
+    data    = request.get_json(force=True, silent=True) or {}
     message = data.get("message", "").strip()
     history = data.get("history", [])
 
     if not message:
         return jsonify({"error": "El campo 'message' es obligatorio."}), 400
 
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key or api_key == "tu_clave_aqui":
-        return jsonify({"error": "GROQ_API_KEY no configurada en las variables de entorno."}), 503
+    if not os.environ.get("GROQ_API_KEY"):
+        return jsonify({"error": "GROQ_API_KEY no está configurada."}), 503
 
     try:
-        agent = _try_load_agent()
+        agent = _load_agent()
         if agent is not None:
-            response = _respond_with_agent(message, history)
+            response, sources = _rag_response(message, history)
             mode = "rag"
         else:
-            response = _respond_direct(message, history)
+            response, sources = _direct_response(message, history)
             mode = "direct"
-        return jsonify({"response": response, "mode": mode})
+        return jsonify({"response": response, "sources": sources, "mode": mode})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
 
-@app.route("/api/health", methods=["GET"])
-def health():
-    db_exists = (ROOT_DIR / "vector_db").exists()
-    return jsonify({
-        "status": "ok",
-        "mode": "rag" if db_exists else "direct",
-        "groq_key_set": bool(os.environ.get("GROQ_API_KEY")),
-    })
-
-
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting dev server at http://localhost:{port}")
+    app.run(debug=True, port=port)
