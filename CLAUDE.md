@@ -125,16 +125,16 @@ python 04_evaluacion/ragas_eval.py --k 4
 `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`.
 Salida: `docs/ragas_report.md`.
 
-### Interfaz local (Streamlit)
+### Interfaz web local
 
 ```bash
-streamlit run app.py
+# Levantar servidor local para desarrollo
+python -m http.server 8080 --directory public/
+# Abrir en: http://localhost:8080
 ```
 
-Requiere `vector_db/` construido. Variables de entorno: `GROQ_API_KEY`.
-
----
-
+La interfaz es `public/index.html` — HTML + Tailwind + KaTeX + marked.js.
+No usar Streamlit. El frontend consume `/api/chat` definido en `api/chat.py`.
 ## Despliegue en Vercel
 
 ### Arquitectura
