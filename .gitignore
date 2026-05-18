@@ -221,3 +221,4 @@ __marimo__/
 vector_db/
 .python_packages/
 .chroma_onnx_cache/
+.vercel
