@@ -1,8 +1,9 @@
 """
 Evaluación RAGAS del pipeline RAG completo.
 
-Usa Groq (Llama 3.3 70b) como juez LLM y all-MiniLM-L6-v2 como modelo
-de embeddings para calcular las cuatro métricas núcleo de RAGAS 0.4.x:
+Usa Groq (llama-3.1-8b-instant, 500K TPD) como juez LLM y
+all-MiniLM-L6-v2 como modelo de embeddings para calcular las cuatro
+métricas núcleo de RAGAS 0.4.x:
   - faithfulness        : la respuesta es fiel al contexto recuperado
   - answer_relevancy    : la respuesta es relevante a la pregunta
   - context_precision   : los chunks recuperados son pertinentes
@@ -10,11 +11,13 @@ de embeddings para calcular las cuatro métricas núcleo de RAGAS 0.4.x:
 
 Uso:
     python 04_evaluacion/ragas_eval.py
-    python 04_evaluacion/ragas_eval.py --output docs/ragas_report.md --k 4
+    python 04_evaluacion/ragas_eval.py --output docs/ragas_report.md -k 2
 """
 
 import argparse
+import json
 import sys
+import time
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -31,17 +34,27 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from ragas import evaluate, EvaluationDataset
 from ragas.dataset_schema import SingleTurnSample
-from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
+# Usar la API clásica (_módulos privados) para compatibilidad con LangchainLLMWrapper.
+# ragas.metrics.collections exige InstructorLLM (OpenAI-only en esta versión).
+from ragas.metrics._faithfulness import Faithfulness
+from ragas.metrics._answer_relevance import AnswerRelevancy
+from ragas.metrics._context_precision import ContextPrecision
+from ragas.metrics._context_recall import ContextRecall
 from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper, HuggingFaceEmbeddings as RagasHFEmbeddings
 
 from rag_utils.query_expansion import expand_query_for_english_corpus
 
 
-DEFAULT_DB_DIR = ROOT_DIR / "vector_db"
+DEFAULT_DB_DIR    = ROOT_DIR / "vector_db"
 DEFAULT_ONNX_CACHE = ROOT_DIR / ".chroma_onnx_cache" / "onnx_models" / "all-MiniLM-L6-v2"
-DEFAULT_OUTPUT = ROOT_DIR / "docs" / "ragas_report.md"
-COLLECTION_NAME = "deeplearning_corpus"
+DEFAULT_OUTPUT    = ROOT_DIR / "docs" / "ragas_report.md"
+CHECKPOINT_FILE   = ROOT_DIR / "docs" / "ragas_checkpoint.json"
+COLLECTION_NAME   = "deeplearning_corpus"
+# llama-3.1-8b-instant: 500K TPD vs 100K del modelo 70B
+JUDGE_MODEL       = "llama-3.1-8b-instant"
+# Truncar contextos a ~600 chars para reducir tokens por llamada
+MAX_CONTEXT_CHARS = 600
 
 # Preguntas de evaluación con respuesta de referencia (ground truth)
 EVAL_SUITE = [
@@ -137,7 +150,25 @@ def retrieve_contexts(query: str, collection, k: int) -> list[str]:
         where={"branch": "deep_learning"},
         include=["documents"],
     )
-    return result.get("documents", [[]])[0]
+    docs = result.get("documents", [[]])[0]
+    # Truncar para reducir consumo de tokens
+    return [d[:MAX_CONTEXT_CHARS] for d in docs]
+
+
+def _call_with_retry(llm: ChatGroq, messages, retries: int = 4) -> str:
+    """Llama al LLM con reintentos exponenciales ante rate-limit 429."""
+    wait = 60
+    for attempt in range(retries):
+        try:
+            return llm.invoke(messages).content
+        except Exception as exc:
+            if "429" in str(exc) and attempt < retries - 1:
+                print(f"    Rate limit — esperando {wait}s (intento {attempt+1}/{retries})...")
+                time.sleep(wait)
+                wait *= 2
+            else:
+                raise
+    raise RuntimeError("Reintentos agotados")
 
 
 def generate_response(question: str, contexts: list[str], llm: ChatGroq) -> str:
@@ -145,24 +176,50 @@ def generate_response(question: str, contexts: list[str], llm: ChatGroq) -> str:
     messages = [
         ("system", (
             "Eres un asistente académico experto en Deep Learning. "
-            "Responde la pregunta del estudiante basándote ÚNICAMENTE en los contextos proporcionados. "
-            "Sé preciso y cita la información de los fragmentos recuperados."
+            "Responde ÚNICAMENTE con base en los contextos. Sé conciso (máx 120 palabras)."
         )),
         ("human", f"Contextos:\n{context_text}\n\nPregunta: {question}"),
     ]
-    response = llm.invoke(messages)
-    return response.content
+    return _call_with_retry(llm, messages)
 
 
 def build_samples(collection, k: int, llm: ChatGroq) -> list[SingleTurnSample]:
+    # Cargar checkpoint si existe
+    checkpoint: dict = {}
+    if CHECKPOINT_FILE.exists():
+        checkpoint = json.loads(CHECKPOINT_FILE.read_text(encoding="utf-8"))
+        print(f"  Checkpoint encontrado: {len(checkpoint)} preguntas ya procesadas.")
+
     samples = []
     for item in EVAL_SUITE:
-        print(f"  Evaluando: {item['topic']}...")
+        topic = item["topic"]
+        if topic in checkpoint:
+            print(f"  {topic}: cargando desde checkpoint.")
+            c = checkpoint[topic]
+            samples.append(SingleTurnSample(
+                user_input=c["question"],
+                retrieved_contexts=c["contexts"],
+                response=c["response"],
+                reference=c["ground_truth"],
+            ))
+            continue
+
+        print(f"  Evaluando: {topic}...")
         contexts = retrieve_contexts(item["question"], collection, k)
         if not contexts:
-            print(f"    Sin contexto para {item['topic']}, saltando.")
+            print(f"    Sin contexto para {topic}, saltando.")
             continue
         response = generate_response(item["question"], contexts, llm)
+
+        # Guardar en checkpoint inmediatamente
+        checkpoint[topic] = {
+            "question": item["question"],
+            "contexts": contexts,
+            "response": response,
+            "ground_truth": item["ground_truth"],
+        }
+        CHECKPOINT_FILE.write_text(json.dumps(checkpoint, ensure_ascii=False, indent=2), encoding="utf-8")
+
         samples.append(SingleTurnSample(
             user_input=item["question"],
             retrieved_contexts=contexts,
@@ -179,7 +236,7 @@ def write_report(result, output: Path, k: int) -> None:
     lines = [
         "# Reporte de Evaluación RAGAS",
         "",
-        f"- Modelo juez: `llama-3.3-70b-versatile` (Groq)",
+        f"- Modelo juez: `{JUDGE_MODEL}` (Groq)",
         f"- Embeddings: `all-MiniLM-L6-v2` (ONNX)",
         f"- Top-k contextos: `{k}`",
         f"- Preguntas evaluadas: `{len(scores)}`",
@@ -239,12 +296,15 @@ def main() -> None:
     client = chromadb.PersistentClient(path=str(args.db_dir))
     collection = client.get_collection(COLLECTION_NAME)
 
-    print("Configurando LLM juez (Groq) y embeddings de evaluación...")
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+    print(f"Configurando LLM juez ({JUDGE_MODEL}) y embeddings de evaluación...")
+    llm = ChatGroq(model=JUDGE_MODEL, temperature=0)
     ragas_llm = LangchainLLMWrapper(llm)
-    ragas_embeddings = LangchainEmbeddingsWrapper(
-        HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    )
+    try:
+        ragas_embeddings = RagasHFEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2")
+    except Exception:
+        ragas_embeddings = LangchainEmbeddingsWrapper(
+            HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        )
 
     print(f"\nGenerando respuestas para {len(EVAL_SUITE)} preguntas (k={args.k})...")
     samples = build_samples(collection, args.k, llm)
@@ -256,9 +316,10 @@ def main() -> None:
     dataset = EvaluationDataset(samples=samples)
 
     print("\nEjecutando evaluación RAGAS (esto puede tardar unos minutos)...")
+    metrics = [Faithfulness(), AnswerRelevancy(), ContextPrecision(), ContextRecall()]
     result = evaluate(
         dataset=dataset,
-        metrics=[Faithfulness(), AnswerRelevancy(), ContextPrecision(), ContextRecall()],
+        metrics=metrics,
         llm=ragas_llm,
         embeddings=ragas_embeddings,
     )
@@ -267,6 +328,10 @@ def main() -> None:
     print(result)
 
     write_report(result, args.output, args.k)
+
+    if CHECKPOINT_FILE.exists():
+        CHECKPOINT_FILE.unlink()
+        print("Checkpoint eliminado.")
 
 
 if __name__ == "__main__":
