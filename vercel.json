@@ -3,13 +3,11 @@
   "builds": [
     {
       "src": "api/chat.py",
-      "use": "@vercel/python",
-      "config": { "requirementsFile": "requirements-vercel.txt" }
+      "use": "@vercel/python"
     },
     {
       "src": "api/health.py",
-      "use": "@vercel/python",
-      "config": { "requirementsFile": "requirements-vercel.txt" }
+      "use": "@vercel/python"
     },
     {
       "src": "public/**",

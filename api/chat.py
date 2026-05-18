@@ -10,13 +10,18 @@ Modes:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("api.chat")
 
 load_dotenv()
 
@@ -72,6 +77,7 @@ def _load_agent():
 
     db_path = ROOT_DIR / "vector_db"
     if not db_path.exists():
+        log.info("vector_db not found — running in direct/Groq mode")
         return None
 
     try:
@@ -82,9 +88,9 @@ def _load_agent():
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         _agent = mod.get_agent()
-        print("✓ RAG mode: ChromaDB loaded.")
+        log.info("RAG mode: ChromaDB loaded successfully")
     except Exception as exc:
-        print(f"✗ RAG unavailable, falling back to direct: {exc}")
+        log.error("RAG unavailable, falling back to direct: %s\n%s", exc, traceback.format_exc())
         _agent = None
 
     return _agent
@@ -133,6 +139,7 @@ def _direct_response(message: str, history: list[dict]) -> tuple[str, list[dict]
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
 
+    log.info("direct mode: initialising ChatGroq")
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
 
     msgs = [SystemMessage(content=_SYSTEM_PROMPT)]
@@ -141,7 +148,10 @@ def _direct_response(message: str, history: list[dict]) -> tuple[str, list[dict]
         msgs.append(cls(content=m["content"]))
     msgs.append(HumanMessage(content=message))
 
-    return llm.invoke(msgs).content, []
+    log.info("direct mode: sending %d messages to Groq", len(msgs))
+    reply = llm.invoke(msgs).content
+    log.info("direct mode: received %d chars", len(reply))
+    return reply, []
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
@@ -151,22 +161,30 @@ def chat():
     message = data.get("message", "").strip()
     history = data.get("history", [])
 
+    log.info("POST /api/chat — message=%r history_len=%d", message[:80], len(history))
+
     if not message:
         return jsonify({"error": "El campo 'message' es obligatorio."}), 400
 
-    if not os.environ.get("GROQ_API_KEY"):
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    log.info("GROQ_API_KEY present: %s (len=%d)", bool(groq_key), len(groq_key))
+    if not groq_key:
         return jsonify({"error": "GROQ_API_KEY no está configurada."}), 503
 
     try:
         agent = _load_agent()
         if agent is not None:
+            log.info("using RAG agent")
             response, sources = _rag_response(message, history)
             mode = "rag"
         else:
+            log.info("using direct Groq mode")
             response, sources = _direct_response(message, history)
             mode = "direct"
+        log.info("response ok mode=%s sources=%d", mode, len(sources))
         return jsonify({"response": response, "sources": sources, "mode": mode})
     except Exception as exc:
+        log.error("Unhandled error in /api/chat:\n%s", traceback.format_exc())
         return jsonify({"error": str(exc)}), 500
 
 
