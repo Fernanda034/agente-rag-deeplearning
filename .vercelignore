@@ -21,10 +21,11 @@ __pycache__/
 # Secrets
 .env
 
-# Heavy requirements files (Vercel uses requirements-vercel.txt via vercel.json)
-requirements.txt
-requirements_chroma_py39.txt
-requirements_metadata.txt
+# Heavy requirements files at project root (api/requirements.txt is kept for @vercel/python)
+/requirements.txt
+/requirements_chroma_py39.txt
+/requirements_metadata.txt
+/requirements-vercel.txt
 
 # Streamlit entrypoint (not used on Vercel)
 app.py
