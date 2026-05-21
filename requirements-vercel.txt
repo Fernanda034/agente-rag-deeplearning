@@ -1,0 +1,6 @@
+flask>=3.0
+flask-cors>=4.0
+groq>=0.11
+langchain-groq>=0.3
+langchain-core>=0.3
+python-dotenv>=1.0
