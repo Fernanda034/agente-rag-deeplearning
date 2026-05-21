@@ -76,6 +76,16 @@ Generar evaluacion profunda:
 python 04_evaluacion/evaluar_profundidad_chunks.py --embedding-backend onnx-minilm -k 5
 ```
 
+### Despliegue en Vercel
+
+Este proyecto está preparado para desplegarse en Vercel con Python. Se agregó `vercel.json` y `runtime.txt` para que Vercel use `app.py` como entrada.
+
+Antes de desplegar, asegúrate de configurar en Vercel la variable de entorno:
+
+- `GROQ_API_KEY`
+
+Si no está definida, la app mostrará un error en tiempo de ejecución.
+
 ### Alcance actual
 
 La evaluacion profunda queda documentada en `docs/evaluacion_profundidad_chunks.md`. El corpus queda fuerte en atencion/Transformers, Adam, regularizacion/estabilidad, VAE/GAN, ResNet y Grad-CAM. Los huecos declarados para una siguiente iteracion son LSTM con fuente local directa, CNN basica/transfer learning, autoencoders basicos, weight decay/early stopping/inicializacion y saliency maps generales.
