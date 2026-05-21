@@ -25,12 +25,10 @@ from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.utilities.arxiv import ArxivAPIWrapper
 from langchain_groq import ChatGroq
 
-# ✅ BUG CORREGIDO: langchain_classic no existe — el import correcto es langchain.agents
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-
+from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# ✅ INTEGRADO: query_expansion que Camilo dejó sin conectar
+
 from rag_utils.query_expansion import expand_query_for_english_corpus
 
 load_dotenv()
@@ -139,11 +137,8 @@ def get_agent():
         temperature=0.2,
     )
 
-    # ── 7. Prompt del agente ───────────────────────────────────────────────────
-    # agent_scratchpad es donde LangChain registra el "pensamiento" del agente
-    # (qué tool usó, qué devolvió, qué va a responder)
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """Eres un asistente académico experto en Machine Learning y Deep Learning, \
+# ── 7. System prompt ───────────────────────────────────────────────────────
+    system_prompt = """Eres un asistente académico experto en Machine Learning y Deep Learning, \
 diseñado para ayudar a estudiantes con sus dudas sobre la materia.
 
 Instrucciones obligatorias:
@@ -154,22 +149,13 @@ Instrucciones obligatorias:
 4. SIEMPRE cita la fuente al final: libro y página, o título del paper de arXiv.
 5. Si no sabes la respuesta tras usar las herramientas, admítelo claramente.
 6. Responde siempre en español, de forma clara, didáctica y estructurada.
-"""),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
+"""
 
-    # ── 8. Construir y retornar el AgentExecutor ───────────────────────────────
-    agent = create_tool_calling_agent(llm, tools, prompt)
-
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,           # muestra el "pensamiento" en consola (útil para debug)
-        handle_parsing_errors=True,
-        max_iterations=5,       # evita loops infinitos
+    # ── 8. Construir y retornar el agente ──────────────────────────────────────
+    agent_executor = create_react_agent(
+        llm,
+        tools,
+        prompt=system_prompt,
     )
 
     return agent_executor
-    
