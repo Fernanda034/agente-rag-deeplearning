@@ -42,7 +42,7 @@ def static_files(filename):
 
 
 # ── Expert system prompt (direct / Groq-only mode) ───────────────────────────
-_SYSTEM_PROMPT = """\
+_SYSTEM_PROMPT = r"""\
 Eres un asistente académico experto en Machine Learning y Deep Learning, \
 diseñado para ayudar a estudiantes universitarios con su temario.
 
@@ -58,7 +58,7 @@ Temas que dominas:
 
 Reglas obligatorias:
 1. Responde siempre en español, de manera didáctica y estructurada.
-2. Escribe fórmulas en LaTeX entre signos de dólar: $E = mc^2$ o $$\\sigma(x) = \\frac{1}{1+e^{-x}}$$.
+2. Escribe fórmulas en LaTeX entre signos de dólar: $E = mc^2$ o $\sigma(x) = \frac{1}{1+e^{-x}}$.
 3. Cita el paper fuente cuando lo conozcas (ej. "Attention Is All You Need, Vaswani et al. 2017").
 4. Usa listas, secciones y negrita para estructurar respuestas largas.
 5. Si no estás seguro, dilo explícitamente.\
@@ -74,11 +74,6 @@ def _load_agent():
     if _agent_attempted:
         return _agent
     _agent_attempted = True
-
-    db_path = ROOT_DIR / "vector_db"
-    if not db_path.exists():
-        log.info("vector_db not found — running in direct/Groq mode")
-        return None
 
     try:
         import importlib.util
@@ -97,10 +92,13 @@ def _load_agent():
 
 
 # ── Source extraction via LangChain callback ──────────────────────────────────
-class _SourceCapture:
+from langchain_core.callbacks import BaseCallbackHandler
+
+class _SourceCapture(BaseCallbackHandler):
     """Minimal retriever callback that collects document metadata."""
     def __init__(self):
         self.sources: list[dict] = []
+        super().__init__()
 
     # LangChain calls this after each retriever invocation
     def on_retriever_end(self, documents, **_):
@@ -120,19 +118,28 @@ class _SourceCapture:
 
 # ── Response helpers ──────────────────────────────────────────────────────────
 def _rag_response(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+    from langchain_core.messages import HumanMessage, AIMessage
     capture = _SourceCapture()
 
-    # Format history as LangChain expects
-    formatted = [
-        ("human" if m["role"] == "user" else "assistant", m["content"])
-        for m in history
-    ]
+    formatted = []
+    for m in history:
+        if m["role"] == "user":
+            formatted.append(HumanMessage(content=m["content"]))
+        else:
+            formatted.append(AIMessage(content=m["content"]))
+    formatted.append(HumanMessage(content=message))
 
     result = _agent.invoke(
-        {"input": message, "chat_history": formatted},
+        {"messages": formatted},
         config={"callbacks": [capture]},
     )
-    return result.get("output", "Sin respuesta."), capture.sources
+    
+    messages = result.get("messages", [])
+    output = "Sin respuesta."
+    if messages:
+        output = messages[-1].content
+
+    return output, capture.sources
 
 
 def _direct_response(message: str, history: list[dict]) -> tuple[str, list[dict]]:
@@ -183,12 +190,21 @@ def chat():
             mode = "direct"
         log.info("response ok mode=%s sources=%d", mode, len(sources))
         return jsonify({"response": response, "sources": sources, "mode": mode})
-    except Exception as exc:
+    except Exception as e:
+        error_msg = str(e)
         log.error("Unhandled error in /api/chat:\n%s", traceback.format_exc())
-        return jsonify({"error": str(exc)}), 500
+        
+        # Interceptar errores de límite de tokens (Rate Limit de Groq)
+        if "rate_limit_exceeded" in error_msg or "Rate limit reached" in error_msg:
+            friendly_msg = "¡Vaya! Hemos agotado el límite de lecturas súper-rápidas del modelo de IA por hoy. El sistema está descansando unos minutos para recargar energía. ¡Vuelve a intentarlo en un momento!"
+            return jsonify({"error": friendly_msg}), 500
+            
+        # Error genérico
+        return jsonify({"error": f"Error 500: {error_msg}"}), 500
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"Starting dev server at http://localhost:{port}")
-    app.run(debug=True, port=port)
+    # Desactivamos el reloader para evitar que PyTorch/__pycache__ provoquen reinicios fantasmas
+    app.run(debug=True, use_reloader=False, port=port)

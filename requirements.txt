@@ -1,14 +1,25 @@
+# Orquestación LangChain
 langchain
 langchain-core
 langchain-community
 langchain-groq
 langchain-chroma
 langchain-huggingface
+
+# Base de datos vectorial y embeddings
 chromadb
+sentence-transformers
+
+# Lectura de PDFs e ingesta
 pypdf
+
+# Interfaz y entorno
 streamlit
 python-dotenv
+
+# Evaluación RAG
 ragas
+
+# Herramientas del agente
 arxiv
 wikipedia
-sentence-transformers

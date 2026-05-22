@@ -1,93 +1,103 @@
-# agente-rag-deeplearning
-Agente inteligente basado en modelos de lenguaje (LLMs) especializado en el dominio de Deep Learning
+# Agente RAG — Deep Learning & Machine Learning
 
-## Aporte de Juan Camilo - ingesta y corpus RAG
+Asistente académico inteligente basado en RAG (Retrieval-Augmented Generation) especializado en Deep Learning y Machine Learning. Responde preguntas en español con fuentes citadas, fórmulas LaTeX y referencias a papers.
 
-Esta rama agrega la parte de ingesta y preparacion del corpus academico de Deep Learning para que el agente RAG no consulte PDFs como una bolsa unica, sino por rama, tema, subtema, fuente y pagina.
+**Demo en vivo:** https://agente-rag-deeplearning.vercel.app
 
-### Que se hizo
+---
 
-- Organizacion del corpus por temas de Deep Learning en `corpus/ciencia_datos/deep_learning/`.
-- Registro de metadatos academicos en `docs/metadatos_temas_corpus.csv`.
-- Extraccion de texto de PDFs pagina por pagina.
-- Limpieza basica de texto extraido y division en chunks con overlap.
-- Ingesta directa en ChromaDB con embeddings locales ONNX MiniLM.
-- Retriever con filtros por `branch`, `topic` y `subtopic`.
-- Expansion bilingue de consultas en espanol hacia terminos tecnicos en ingles.
-- Evaluacion basica de alcance y evaluacion profunda de chunks.
+## Arquitectura general
 
-### Archivos principales
-
-```text
-01_ingesta/
-  preprocess_preview.py
-  ingestion_chroma_direct.py
-02_vectorstore/
-  retriever_chroma_direct.py
-04_evaluacion/
-  evaluar_cobertura_direct.py
-  evaluar_profundidad_chunks.py
-rag_utils/
-  query_expansion.py
-docs/
-  arquitectura_rag_metadatos.md
-  metadatos_temas_corpus.csv
-  reporte_preprocesamiento_preview.md
-  reporte_ingesta_chroma_direct.md
-  tabla_alcance_agente.md
-  evaluacion_profundidad_chunks.md
+```
+corpus/ PDFs
+  → 01_ingesta/          extracción, limpieza, chunking → ChromaDB
+  → 02_vectorstore/      recuperación filtrada por tema/subtema
+  → rag_utils/           expansión de consultas ES→EN, embeddings ONNX
+  → 03_agente/           agente ReAct (Groq Llama 3.3 70B + ArXiv)
+  → api/chat.py          Flask serverless (Vercel)
+  → public/index.html    interfaz web (Tailwind + KaTeX + marked.js)
 ```
 
-### Como revisar el trabajo
+El sistema opera en **dos modos automáticos**:
+- **RAG** — cuando `vector_db/` existe localmente: recupera chunks del corpus con ChromaDB y reranking.
+- **Groq directo** — en Vercel (sin `vector_db/`): usa un system prompt experto y Llama 3.3 70B directamente.
 
-Instalar dependencias en Python 3.10 o 3.11:
+---
+
+## Equipo y pilares
+
+| Pilar | Responsable | Descripción |
+|-------|-------------|-------------|
+| `01_ingesta` | Juan Camilo | Extracción PDF, limpieza regex, chunking, ingesta ChromaDB con metadatos |
+| `02_vectorstore` | Juan Camilo / María | Retriever con filtros por `branch/topic/subtopic`, evaluación de cobertura |
+| `03_agente` | María | Agente ReAct con herramienta RAG + fallback ArXiv, cross-encoder reranker |
+| `04_evaluacion` + deploy | Fernanda | Evaluación RAGAS, interfaz web, despliegue Vercel |
+
+---
+
+## Uso local (modo RAG completo)
+
+### 1. Requisitos
+
+Python 3.10 o 3.11. Crear `.env` desde el ejemplo:
 
 ```bash
-python -m pip install -r requirements_chroma_py39.txt
+cp .env.example .env
+# Editar .env y agregar: GROQ_API_KEY=gsk_...
 ```
 
-Generar preview de preprocesamiento:
+Instalar dependencias:
 
 ```bash
-python 01_ingesta/preprocess_preview.py
+pip install -r requirements_chroma_py39.txt   # embeddings + ChromaDB
+pip install -r requirements.txt               # LangChain + Groq + RAGAS
 ```
 
-Regenerar la base vectorial local:
+### 2. Construir la base vectorial
 
 ```bash
 python 01_ingesta/ingestion_chroma_direct.py --embedding-backend onnx-minilm
 ```
 
-Probar busqueda por tema:
+### 3. Levantar el servidor local
 
 ```bash
-python 02_vectorstore/retriever_chroma_direct.py "Que es Batch Normalization?" --topic regularizacion_estabilidad
+python api/chat.py
+# Abre: http://localhost:8000
 ```
 
-Generar evaluacion de cobertura:
+---
+
+## Evaluación
 
 ```bash
+# Cobertura del corpus por tema
 python 04_evaluacion/evaluar_cobertura_direct.py --embedding-backend onnx-minilm -k 5
+
+# Profundidad de chunks
+python 04_evaluacion/evaluar_profundidad_chunks.py --embedding-backend onnx-minilm -k 5
+
+# Evaluación RAGAS completa (requiere vector_db/ y GROQ_API_KEY)
+python 04_evaluacion/ragas_eval.py --k 4
+# Salida: docs/ragas_report.md
 ```
 
-Generar evaluacion profunda:
+---
+
+## Despliegue (Vercel)
+
+La app está desplegada en https://agente-rag-deeplearning.vercel.app y funciona sin `vector_db/` gracias al modo Groq directo.
+
+Para redesplegar:
 
 ```bash
-python 04_evaluacion/evaluar_profundidad_chunks.py --embedding-backend onnx-minilm -k 5
+vercel --prod
 ```
 
-### Despliegue en Vercel
+Variable de entorno requerida en el dashboard de Vercel: `GROQ_API_KEY`.
 
-Este proyecto está preparado para desplegarse en Vercel con Python. Se agregó `vercel.json` y `runtime.txt` para que Vercel use `app.py` como entrada.
+---
 
-Antes de desplegar, asegúrate de configurar en Vercel la variable de entorno:
+## Artefactos locales (no versionados)
 
-- `GROQ_API_KEY`
-
-Si no está definida, la app mostrará un error en tiempo de ejecución.
-
-### Alcance actual
-
-La evaluacion profunda queda documentada en `docs/evaluacion_profundidad_chunks.md`. El corpus queda fuerte en atencion/Transformers, Adam, regularizacion/estabilidad, VAE/GAN, ResNet y Grad-CAM. Los huecos declarados para una siguiente iteracion son LSTM con fuente local directa, CNN basica/transfer learning, autoencoders basicos, weight decay/early stopping/inicializacion y saliency maps generales.
-
-`vector_db/`, `.python_packages/` y `.chroma_onnx_cache/` no se suben a GitHub porque son artefactos locales regenerables.
+`vector_db/`, `.chroma_onnx_cache/`, `.python_packages/` son regenerables y están en `.gitignore`.

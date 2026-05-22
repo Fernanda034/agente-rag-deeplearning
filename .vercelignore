@@ -1,0 +1,31 @@
+# Large local artifacts — not needed in Vercel (direct Groq mode)
+vector_db/
+corpus/
+.chroma_onnx_cache/
+
+# Local-only pipeline scripts
+01_ingesta/
+02_vectorstore/
+03_agente/
+04_evaluacion/
+
+# Notebooks and docs source
+notebooks/
+docs/*.docx
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets
+.env
+
+# Heavy requirements files at project root (api/requirements.txt is kept for @vercel/python)
+/requirements.txt
+/requirements_chroma_py39.txt
+/requirements_metadata.txt
+/requirements-vercel.txt
+
+# Streamlit entrypoint (not used on Vercel)
+app.py
