@@ -1,0 +1,394 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asistente de Deep Learning</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    /* ÔöÇÔöÇ scrollbar ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    #chat-container::-webkit-scrollbar { width: 5px; }
+    #chat-container::-webkit-scrollbar-track { background: #f1f5f9; }
+    #chat-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+
+    /* ÔöÇÔöÇ markdown styles ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    .prose p  { margin-bottom: .45rem; line-height: 1.7; }
+    .prose ul, .prose ol { margin: .35rem 0 .35rem 1.2rem; }
+    .prose li { margin-bottom: .2rem; }
+    .prose h1,.prose h2,.prose h3 { font-weight: 700; margin: .7rem 0 .3rem; }
+    .prose h1 { font-size: 1.1rem; }
+    .prose h2 { font-size: 1rem; }
+    .prose h3 { font-size: .93rem; }
+    .prose strong { font-weight: 700; }
+    .prose em     { font-style: italic; }
+    .prose blockquote {
+      border-left: 3px solid #818cf8; padding-left: .7rem;
+      color: #475569; margin: .4rem 0;
+    }
+    .prose code:not(.katex *) {
+      background: rgba(0,0,0,.07); border-radius: 3px;
+      padding: .1rem .28rem; font-size: .83em; font-family: monospace;
+    }
+    .prose pre {
+      background: #1e293b; border-radius: 8px; padding: .8rem;
+      overflow-x: auto; margin: .45rem 0;
+    }
+    .prose pre code { background: none; color: #e2e8f0; font-size: .8em; }
+    .prose .katex-display { overflow-x: auto; padding: .3rem 0; }
+
+    /* ÔöÇÔöÇ topic chips ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    .topic-chip {
+      white-space: nowrap;
+      font-size: .73rem;
+      padding: .22rem .65rem;
+      border-radius: 9999px;
+      border: 1px solid #c7d2fe;
+      background: #eef2ff;
+      color: #4338ca;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .topic-chip:hover { background: #e0e7ff; }
+
+    /* ÔöÇÔöÇ source citation chips ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      font-size: .68rem;
+      padding: .18rem .55rem;
+      border-radius: 9999px;
+      border: 1px solid #d1fae5;
+      background: #f0fdf4;
+      color: #065f46;
+    }
+
+    /* ÔöÇÔöÇ thinking dots ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    @keyframes blink { 0%,80%,100%{opacity:0} 40%{opacity:1} }
+    .dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: #818cf8; animation: blink 1.4s infinite; margin: 0 2px;
+    }
+    .dot:nth-child(2){animation-delay:.2s}
+    .dot:nth-child(3){animation-delay:.4s}
+
+    /* ÔöÇÔöÇ message entrance ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+    @keyframes fadeUp {
+      from{opacity:0;transform:translateY(6px)}
+      to  {opacity:1;transform:translateY(0)}
+    }
+    .msg-row { animation: fadeUp .18s ease; }
+  </style>
+</head>
+
+<body class="bg-slate-50 flex flex-col h-screen overflow-hidden text-sm">
+
+  <!-- ÔöÇÔöÇÔöÇ Header ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ -->
+  <header class="bg-gradient-to-r from-indigo-700 to-violet-700 text-white shadow-md flex-shrink-0">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-xl">­ƒºá</span>
+        <div>
+          <h1 class="font-bold text-base leading-tight">Asistente de Deep Learning</h1>
+          <p class="text-indigo-200 text-xs">RAG ┬À Groq Llama 3.3 70b ┬À ChromaDB</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="mode-badge" class="text-xs px-2 py-0.5 rounded-full hidden"></span>
+        <button onclick="clearChat()"
+          class="text-xs bg-white/10 hover:bg-white/20 transition px-3 py-1.5 rounded-lg">
+          Limpiar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ÔöÇÔöÇÔöÇ Topic chips ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ -->
+  <div class="bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
+    <div class="max-w-3xl mx-auto px-4 py-2 flex gap-1.5 flex-nowrap items-center">
+      <span class="text-xs text-slate-400 whitespace-nowrap mr-1">Preguntar sobre:</span>
+      <button class="topic-chip" onclick="sendTopic('┬┐Qu├® es self-attention y para qu├® sirve multi-head attention?')">Transformers</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐C├│mo funciona el optimizador Adam y en qu├® se diferencia de SGD?')">Adam</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐Para qu├® sirve Batch Normalization en redes profundas?')">BatchNorm</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐En qu├® se diferencian LSTM y GRU?')">LSTM / GRU</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐Por qu├® ResNet usa conexiones residuales?')">ResNet</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐Qu├® mapa produce Grad-CAM y c├│mo se calcula?')">Grad-CAM</button>
+      <button class="topic-chip" onclick="sendTopic('┬┐En qu├® se diferencia un VAE de una GAN?')">VAE vs GAN</button>
+    </div>
+  </div>
+
+  <!-- ÔöÇÔöÇÔöÇ Chat messages ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ -->
+  <main id="chat-container" class="flex-1 overflow-y-auto">
+    <div id="messages" class="max-w-3xl mx-auto px-4 py-5 flex flex-col gap-4">
+
+      <!-- welcome -->
+      <div class="msg-row flex gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600
+                    flex items-center justify-center text-white flex-shrink-0 mt-0.5">­ƒºá</div>
+        <div class="flex flex-col gap-1 max-w-[82%]">
+          <span class="text-xs text-slate-400">Asistente</span>
+          <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+            <div class="prose text-slate-800">
+              <p>┬íHola! Soy tu asistente acad├®mico de <strong>Deep Learning</strong>.</p>
+              <p>Puedo responder preguntas sobre el temario: optimizadores, regularizaci├│n, redes recurrentes,
+                 Transformers, visi├│n por computador, explicabilidad y modelos generativos.</p>
+              <p class="text-slate-400 text-xs">Usa los botones de arriba o escribe tu pregunta.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- #messages -->
+  </main>
+
+  <!-- ÔöÇÔöÇÔöÇ Input bar ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ -->
+  <footer class="bg-white border-t border-slate-200 flex-shrink-0 shadow-md">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex gap-2 items-end">
+      <textarea
+        id="user-input"
+        rows="1"
+        placeholder="Escribe tu pregunta sobre Deep LearningÔÇª"
+        class="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-2.5
+               focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+               transition max-h-28 overflow-y-auto text-sm"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button id="send-btn" onclick="sendMessage()"
+        class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed
+               text-white rounded-xl px-4 py-2.5 font-medium transition flex items-center gap-1.5 flex-shrink-0">
+        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0
+                   009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0
+                   001.17-1.408l-7-14z"/>
+        </svg>
+        Enviar
+      </button>
+    </div>
+    <p class="text-center text-xs text-slate-400 pb-2">
+      Basado en papers acad├®micos ┬À Groq Llama 3.3 70b ┬À 2026
+    </p>
+  </footer>
+
+  <script>
+    // ÔöÇÔöÇ Config ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    const API_URL = '/api/chat';
+    const history = [];
+
+    // ÔöÇÔöÇ marked: use() replaces deprecated setOptions ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    marked.use({ breaks: true, gfm: true });
+
+    // ÔöÇÔöÇ Helpers ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 112) + 'px';
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    }
+
+    function sendTopic(q) {
+      document.getElementById('user-input').value = q;
+      sendMessage();
+    }
+
+    function scrollBottom() {
+      const c = document.getElementById('chat-container');
+      c.scrollTop = c.scrollHeight;
+    }
+
+    function renderMath(node) {
+      renderMathInElement(node, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true  },
+          { left: '$',  right: '$',  display: false },
+          { left: '\\[', right: '\\]', display: true  },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+
+    // ÔöÇÔöÇ Source citations ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function buildSourcesRow(sources) {
+      if (!sources || sources.length === 0) return null;
+
+      const row = document.createElement('div');
+      row.className = 'flex flex-wrap gap-1 mt-1.5';
+
+      sources.forEach(s => {
+        const chip = document.createElement('span');
+        chip.className = 'source-chip';
+        const topic = s.topic
+          ? s.topic.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          : '';
+        const page  = s.page ? ` ┬À p. ${s.page}` : '';
+        chip.innerHTML = `­ƒôä <strong>${s.file}</strong>${page}${topic ? ' ┬À ' + topic : ''}`;
+        row.appendChild(chip);
+      });
+
+      return row;
+    }
+
+    // ÔöÇÔöÇ Append user bubble ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function appendUser(message) {
+      const container = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.className = 'msg-row flex gap-3 flex-row-reverse';
+      row.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500
+                    flex items-center justify-center text-white flex-shrink-0 mt-0.5">­ƒæñ</div>
+        <div class="flex flex-col gap-1 items-end max-w-[82%]">
+          <span class="text-xs text-slate-400">T├║</span>
+          <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5">
+            ${escapeHtml(message)}
+          </div>
+        </div>`;
+      container.appendChild(row);
+      scrollBottom();
+    }
+
+    // ÔöÇÔöÇ Append assistant bubble ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function appendAssistant(content, sources) {
+      const container = document.getElementById('messages');
+
+      const row = document.createElement('div');
+      row.className = 'msg-row flex gap-3';
+
+      const avatar = document.createElement('div');
+      avatar.className = `w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600
+                          flex items-center justify-center text-white flex-shrink-0 mt-0.5`;
+      avatar.textContent = '­ƒºá';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'flex flex-col gap-1 max-w-[82%]';
+
+      const label = document.createElement('span');
+      label.className = 'text-xs text-slate-400';
+      label.textContent = 'Asistente';
+
+      const box = document.createElement('div');
+      box.className = 'bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm';
+
+      const inner = document.createElement('div');
+      inner.className = 'prose text-slate-800';
+      inner.innerHTML = marked.parse(content);
+      renderMath(inner);
+      box.appendChild(inner);
+
+      // citations
+      const citRow = buildSourcesRow(sources);
+      if (citRow) box.appendChild(citRow);
+
+      bubble.appendChild(label);
+      bubble.appendChild(box);
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+      container.appendChild(row);
+      scrollBottom();
+    }
+
+    // ÔöÇÔöÇ Thinking indicator ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function showThinking() {
+      const container = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.id = 'thinking-row';
+      row.className = 'msg-row flex gap-3';
+      row.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600
+                    flex items-center justify-center text-white flex-shrink-0 mt-0.5">­ƒºá</div>
+        <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm
+                    px-4 flex items-center gap-0.5" style="height:40px;">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>`;
+      container.appendChild(row);
+      scrollBottom();
+    }
+    function hideThinking() { document.getElementById('thinking-row')?.remove(); }
+
+    // ÔöÇÔöÇ Mode badge ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function updateBadge(mode) {
+      const badge = document.getElementById('mode-badge');
+      if (!mode) return;
+      badge.textContent = mode === 'rag' ? '­ƒùä´©Å RAG activo' : 'ÔÜí Groq directo';
+      badge.className = `text-xs px-2 py-0.5 rounded-full ${
+        mode === 'rag'
+          ? 'bg-emerald-400/30 text-emerald-100'
+          : 'bg-amber-300/30 text-amber-100'
+      }`;
+      badge.classList.remove('hidden');
+    }
+
+    // ÔöÇÔöÇ Clear chat ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function clearChat() {
+      history.length = 0;
+      const c = document.getElementById('messages');
+      while (c.children.length > 1) c.removeChild(c.lastChild);
+    }
+
+    // ÔöÇÔöÇ Escape HTML for user messages ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // ÔöÇÔöÇ Main send ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    async function sendMessage() {
+      const input  = document.getElementById('user-input');
+      const btn    = document.getElementById('send-btn');
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+      btn.disabled = true;
+
+      appendUser(message);
+      history.push({ role: 'user', content: message });
+      showThinking();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history: history.slice(0, -1) }),
+        });
+
+        hideThinking();
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          appendAssistant(`ÔØî **Error ${res.status}:** ${err.error || res.statusText}`, []);
+          return;
+        }
+
+        const data = await res.json();
+        appendAssistant(data.response || 'Sin respuesta.', data.sources || []);
+        history.push({ role: 'assistant', content: data.response || '' });
+        updateBadge(data.mode);
+
+      } catch (err) {
+        hideThinking();
+        appendAssistant(
+          `ÔØî **Sin conexi├│n con la API.**\n\nVerifica que el servidor est├® activo (\`python api/chat.py\`)\no que la variable \`GROQ_API_KEY\` est├® configurada en Vercel.`,
+          []
+        );
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    // ÔöÇÔöÇ Init ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    document.getElementById('user-input').focus();
+  </script>
+</body>
+</html>
